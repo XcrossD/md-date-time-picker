@@ -49,7 +49,8 @@ class mdDateTimePicker {
     autoClose = false,
     inner24 = false,
     prevHandle = '<div class="mddtp-prev-handle"></div>',
-    nextHandle = '<div class="mddtp-next-handle"></div>'
+    nextHandle = '<div class="mddtp-next-handle"></div>',
+    timeOnlySharp = false
   }) {
     this._type = type
     this._init = init
@@ -65,6 +66,7 @@ class mdDateTimePicker {
     this._inner24 = inner24
     this._prevHandle = prevHandle
     this._nextHandle = nextHandle
+    this._timeOnlySharp = timeOnlySharp
 
     /**
     * [dialog selected classes have the same structure as dialog but one level down]
@@ -216,6 +218,9 @@ class mdDateTimePicker {
 
     this._sDialog.tDate = this._init.clone()
     this._sDialog.sDate = this._init.clone()
+    if (this._timeOnlySharp) {
+      this._sDialog.sDate.minute(0);
+    }
   }
 
   /**
@@ -529,7 +534,11 @@ class mdDateTimePicker {
       subtitle.removeAttribute('style')
       dotSpan.removeAttribute('style')
     }
-    this._fillText(minute, m.format('mm'))
+    if (this._timeOnlySharp) {
+      this._fillText(minute, '00')
+    } else {
+      this._fillText(minute, m.format('mm'))
+    }
     this._initHour()
     this._initMinute()
     this._attachEventHandlers()
@@ -619,19 +628,35 @@ class mdDateTimePicker {
     const rotate = 'mddtp-picker__cell--rotate-'
     const cell = 'mddtp-picker__cell'
     const docfrag = document.createDocumentFragment()
-    for (let i = 5, j = 10; i <= 60; i += 5, j += 10) {
+    if (!this._timeOnlySharp) {
+      for (let i = 5, j = 10; i <= 60; i += 5, j += 10) {
+        const div = document.createElement('div')
+        const span = document.createElement('span')
+        div.classList.add(cell)
+        if (i === 60) {
+          span.textContent = this._numWithZero(0)
+        } else {
+          span.textContent = this._numWithZero(i)
+        }
+        if (minuteNow === 0) {
+          minuteNow = 60
+        }
+        div.classList.add(rotate + j)
+        // (minuteNow === 1 && i === 60) for corner case highlight 00 at 01
+        if ((minuteNow === i) || (minuteNow - 1 === i) || (minuteNow + 1 === i) || (minuteNow === 1 && i === 60)) {
+          div.id = sMinute
+          div.classList.add(selected)
+        }
+        div.appendChild(span)
+        docfrag.appendChild(div)
+      }
+    } else {
       const div = document.createElement('div')
       const span = document.createElement('span')
       div.classList.add(cell)
-      if (i === 60) {
-        span.textContent = this._numWithZero(0)
-      } else {
-        span.textContent = this._numWithZero(i)
-      }
-      if (minuteNow === 0) {
-        minuteNow = 60
-      }
-      div.classList.add(rotate + j)
+      span.textContent = this._numWithZero(0)
+      minuteNow = 60
+      div.classList.add(rotate + 120)
       // (minuteNow === 1 && i === 60) for corner case highlight 00 at 01
       if ((minuteNow === i) || (minuteNow - 1 === i) || (minuteNow + 1 === i) || (minuteNow === 1 && i === 60)) {
         div.id = sMinute
@@ -801,6 +826,9 @@ class mdDateTimePicker {
     needle.classList.add(selection)
     if (!mdDateTimePicker.dialog.view) {
       value = me._sDialog.sDate.format('m')
+      if (me._timeOnlySharp) {
+        value = '00'
+      }
 
       // Need to desactivate for the autoClose mode as it mess things up.  If you have an idea, feel free to give it a shot !
       if (me._autoClose !== true) {
@@ -1219,49 +1247,51 @@ class mdDateTimePicker {
      * netTrek
      * fixes for iOS - drag
      */
-    fakeNeedleDraggabilly.on('pointerMove', (e) => {
-      let clientX = e.clientX
-      let clientY = e.clientY
+    if (!me._timeOnlySharp) {
+      fakeNeedleDraggabilly.on('pointerMove', (e) => {
+        let clientX = e.clientX
+        let clientY = e.clientY
 
-      if (clientX === undefined) {
-        if (e.pageX === undefined) {
-          if (e.touches && e.touches.length > 0) {
-            clientX = e.touches[0].clientX
-            clientY = e.touches[0].clientY
+        if (clientX === undefined) {
+          if (e.pageX === undefined) {
+            if (e.touches && e.touches.length > 0) {
+              clientX = e.touches[0].clientX
+              clientY = e.touches[0].clientY
+            } else {
+              throw new Error('coult not detect pageX, pageY')
+            }
           } else {
-            throw new Error('coult not detect pageX, pageY')
+            clientX = e.pageX - document.body.scrollLeft - document.documentElement.scrollLeft
+            clientY = e.pageY - document.body.scrollTop - document.documentElement.scrollTop
           }
-        } else {
-          clientX = e.pageX - document.body.scrollLeft - document.documentElement.scrollLeft
-          clientY = e.pageY - document.body.scrollTop - document.documentElement.scrollTop
         }
-      }
-      // console.info ( 'Drag clientX' , clientX, clientY, e );
+        // console.info ( 'Drag clientX' , clientX, clientY, e );
 
-      const xPos = clientX - hOffset.left - (hOffset.width / 2)
-      const yPos = clientY - hOffset.top - (hOffset.height / 2)
+        const xPos = clientX - hOffset.left - (hOffset.width / 2)
+        const yPos = clientY - hOffset.top - (hOffset.height / 2)
 
-      let slope = Math.atan2(-yPos, xPos)
-      needle.className = ''
-      if (slope < 0) {
-        slope += 2 * Math.PI
-      }
-      slope *= 180 / Math.PI
-      slope = 360 - slope
-      if (slope > 270) {
-        slope -= 360
-      }
-      divides = parseInt(slope / 6)
-      const same = Math.abs((6 * divides) - slope)
-      const upper = Math.abs((6 * (divides + 1)) - slope)
-      if (upper < same) {
-        divides++
-      }
-      divides += 15
-      needle.classList.add(selection)
-      needle.classList.add(quick)
-      needle.classList.add(rotate + (divides * 2))
-    })
+        let slope = Math.atan2(-yPos, xPos)
+        needle.className = ''
+        if (slope < 0) {
+          slope += 2 * Math.PI
+        }
+        slope *= 180 / Math.PI
+        slope = 360 - slope
+        if (slope > 270) {
+          slope -= 360
+        }
+        divides = parseInt(slope / 6)
+        const same = Math.abs((6 * divides) - slope)
+        const upper = Math.abs((6 * (divides + 1)) - slope)
+        if (upper < same) {
+          divides++
+        }
+        divides += 15
+        needle.classList.add(selection)
+        needle.classList.add(quick)
+        needle.classList.add(rotate + (divides * 2))
+      })
+    }
     /**
      * netTrek
      * fixes for iOS - drag
@@ -1298,8 +1328,10 @@ class mdDateTimePicker {
       me._sDialog.sDate.minutes(divides)
     }
 
-    fakeNeedleDraggabilly.on('pointerUp', onDragEnd)
-    fakeNeedleDraggabilly.on('dragEnd', onDragEnd)
+    if (!me._timeOnlySharp) {
+      fakeNeedleDraggabilly.on('pointerUp', onDragEnd)
+      fakeNeedleDraggabilly.on('dragEnd', onDragEnd)
+    }
   }
 
   /**
